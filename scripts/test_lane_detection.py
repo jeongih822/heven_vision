@@ -50,7 +50,7 @@ def plothistogram(image):
         2) rightbase : right lane pixel coords
     """
     histogram = np.sum(image[image.shape[0]//2:, :], axis=0)
-    midpoint = np.int(histogram.shape[0]/2)
+    midpoint = np.int_(histogram.shape[0]/2)
     leftbase = np.argmax(histogram[:midpoint])
     rightbase = np.argmax(histogram[midpoint:]) + midpoint
 
@@ -68,7 +68,7 @@ def slide_window_search(binary_warped, left_current, right_current):
     out_img = np.dstack((binary_warped, binary_warped, binary_warped))
 
     nwindows = 24
-    window_height = np.int(binary_warped.shape[0] / nwindows)
+    window_height = np.int_(binary_warped.shape[0] / nwindows)
     nonzero = binary_warped.nonzero()  # 선이 있는 부분의 인덱스만 저장
     nonzero_y = np.array(nonzero[0])  # 선이 있는 부분 y의 인덱스 값
     nonzero_x = np.array(nonzero[1])  # 선이 있는 부분 x의 인덱스 값
@@ -98,9 +98,9 @@ def slide_window_search(binary_warped, left_current, right_current):
         cv2.imshow("sliding window", out_img)
 
         if len(good_left) > minpix:
-            left_current = np.int(np.mean(nonzero_x[good_left]))
+            left_current = np.int_(np.mean(nonzero_x[good_left]))
         if len(good_right) > minpix:
-            right_current = np.int(np.mean(nonzero_x[good_right]))
+            right_current = np.int_(np.mean(nonzero_x[good_right]))
 
     left_lane = np.concatenate(left_lane)  # np.concatenate() -> array를 1차원으로 합침
     right_lane = np.concatenate(right_lane)
