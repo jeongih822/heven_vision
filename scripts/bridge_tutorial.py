@@ -14,7 +14,7 @@ class example():
         self.bridge = CvBridge()
         
         rospy.init_node('CvBride_node', anonymous=False)
-        rospy.Subscriber('/image_jpeg/compressed', CompressedImage, self.camera_callback)
+        rospy.Subscriber('/image_jpeg_2/compressed', CompressedImage, self.camera_callback)
         
         
     def camera_callback(self, data):
