@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# Import necessary libraries
 import torch
 import numpy as np
 import random
@@ -10,16 +11,15 @@ from torchvision import transforms as tr
 from torch.utils.data import DataLoader, ConcatDataset
 import torch.optim as optim
 import time
-import net
+import net  #the network architecture
 import tqdm
 import os
 from matplotlib import pyplot as plt
 import shutil
 import argparse
 
-
 def main(args):
-    # parameter setting
+    # Parse command-line arguments
     modelName = args.model
     numEpoch = args.epoch
     savingPeriod = args.savePeriod
@@ -40,6 +40,8 @@ def main(args):
     torch.manual_seed(randomSeed)
     np.random.seed(randomSeed)
     random.seed(randomSeed)
+
+    # Set device (cuda or cpu) based on availability
     if torch.cuda.is_available():
         device = "cuda"
         torch.cuda.manual_seed(randomSeed)
@@ -47,6 +49,7 @@ def main(args):
     else:
         device = "cpu"
 
+    # Instantiate the neural network model
     network = net.NET()
     network.to(device)
 
@@ -56,6 +59,7 @@ def main(args):
 
     print("Device:", device)
 
+    # Choose the appropriate loss function based on user input
     if loss == "L1":
         lossFunction = nn.L1Loss().to(device)
     elif loss == "L2":
@@ -66,26 +70,31 @@ def main(args):
         print("unexpected Loss function")
         return
 
+    # Set up the Adam optimizer
     optimizer = optim.Adam(network.parameters(), lr=learningRate)
+
+    # Create a directory to save the model checkpoints
     os.makedirs(modelName, exist_ok=True)
 
+    # Define image transformations
     trans = tr.Compose([tr.Grayscale(1), tr.ToTensor()])
+
+    # Create training and validation datasets
     trainSet = torchvision.datasets.ImageFolder(root="trainingSet", transform=trans)
     validSet = torchvision.datasets.ImageFolder(root="validSet", transform=trans)
 
     print("# of Training Image:", len(trainSet))
     print("# of Validation Image:", len(validSet))
 
-    trainLoader = DataLoader(
-        trainSet, batch_size=batchSize, shuffle=True, num_workers=4
-    )
-    validLoader = DataLoader(
-        validSet, batch_size=batchSize, shuffle=True, num_workers=4
-    )
+    # Create data loaders for training and validation datasets
+    trainLoader = DataLoader(trainSet, batch_size=batchSize, shuffle=True, num_workers=4)
+    validLoader = DataLoader(validSet, batch_size=batchSize, shuffle=True, num_workers=4)
 
     totalTime = 0
     bestValidLoss = 9999.0
     saveEpoch = 0
+
+    # Training loop
     for epoch in range(numEpoch):
         start = time.time()
         msg = "Epoch " + str(epoch + 1) + "/" + str(numEpoch)
@@ -95,6 +104,7 @@ def main(args):
         numCorrect = 0
         total = 0
 
+        # Iterate over batches in the training data
         for i, (images, labels) in enumerate(tqdm.tqdm(trainLoader, desc=msg)):
             images = images.to(device)
             labels = labels.to(device)
@@ -132,6 +142,8 @@ def main(args):
             validLoss = 0.0
             numCorrect = 0
             totalV = 0
+
+            # Validate the model on the validation set
             with torch.no_grad():
                 for j, (images, labels) in enumerate(
                     tqdm.tqdm(validLoader, desc="Validation Set"), 1
@@ -148,6 +160,7 @@ def main(args):
 
                 validAccuracy = numCorrect / totalV * 100
 
+                # Save the model if the current validation loss is the best so far
                 if validLoss / totalV < bestValidLoss:
                     bestValidLoss = validLoss / totalV
                     saveEpoch = epoch + 1
@@ -161,6 +174,7 @@ def main(args):
                         PATH = modelName + "/epoch" + str(saveEpoch) + ".pth"
                     torch.save(network.state_dict(), PATH)
 
+                # Save the model at the last epoch
                 if epoch + 1 == numEpoch:
                     PATH = modelName + "/lastEpoch.pth"
                     torch.save(network.state_dict(), PATH)
@@ -170,12 +184,14 @@ def main(args):
                     % (validLoss / totalV, validAccuracy, bestValidLoss, saveEpoch)
                 )
 
+                # Record training and validation losses for plotting
                 lossTrain.append(trainLoss / total)
                 lossValid.append(validLoss / totalV)
                 epochList.append(epoch + 1)
 
     print("Finish")
 
+    # Plot the training and validation losses
     plt.title(modelName)
     plt.plot(epochList, lossTrain)
     plt.plot(epochList, lossValid)
@@ -184,6 +200,7 @@ def main(args):
     plt.legend(["Loss Train", "Loss Valid"])
     plt.savefig(modelName + "/" + modelName + ".png")
 
+    # Write information about the training process to a text file
     f = open(modelName + "/Info.txt", "a")
 
     f.write("\n====================================================\n")
@@ -207,8 +224,8 @@ def main(args):
 
     f.close()
 
-
 if __name__ == "__main__":
+    # Parse command-line arguments and run the main function
     parser = argparse.ArgumentParser()
     parser.add_argument("--epoch", type=int, default=10)
     parser.add_argument("--savePeriod", type=int, default=5)
