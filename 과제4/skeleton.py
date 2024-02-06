@@ -1,261 +1,66 @@
-import cv2
-import numpy as np
-import matplotlib.pyplot as plt
-import time
+#!/usr/bin/env python3
+# coding: utf-8
 
-cap = cv2.VideoCapture('../video/curve_lane.mp4')
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
-"""
-    [HEVEN 비전팀 차선 인식 파라미터 튜닝 과제]
-    
-    Notion에 정리해놓은 내용과 지금까지 스터디했던 내용을 되짚어보며 파라미터 튜닝을 해봅시다.
-    
-    1. warpping() 함수 파라미터 튜닝
-    2. color_filter() 함수 파라미터 튜닝 (hls 말고 다른 채널을 사용해도 됩니다)
-    3. main() 함수 내의 cv2.GaussianBlur() 함수 파라미터 튜닝
-    4. main() 함수 내의 cv2.threshold() 함수 파라미터 튜닝
-    5. slide_window_search() 함수의 sliding window 개수 파라미터 수정하면서 뭐가 바뀌는지 관찰해보세요
-    
-    튜닝해야하는 파라미터들은 전부 0으로 처리해뒀습니다.
-    
-    각자 코드를 과제4 폴더에 push해주시면 됩니다. (파일명 : 이름.py)
-"""
-
-def color_filter(image):
+# ResNet block
+class NET_ResNet(nn.Module):
     """
-        HLS 필터 사용
-        
-        lower & upper : 흰색으로 판단할 minimum pixel 값
-        white_mask : lower과 upper 사이의 값만 남긴 mask
-        masked : cv2.bitwise_and() 함수를 통해 흰색인 부분 제외하고는 전부 검정색 처리
+    kernel size, stride, padding 값을 넣으면 됩니다
+    conv1: 3*1 kernel 사용
+    conv2: 1*3 kernel 사용
+    conv1, conv2에서 피쳐 크기 유지
     """
-    hls = cv2.cvtColor(image, cv2.COLOR_BGR2HLS)
-    
-    lower = np.array([0, 0, 0])
-    upper = np.array([0, 0, 0])
+    def __init__(self, input, output):
+        super(NET_ResNet, self).__init__()
 
-    white_mask = cv2.inRange(hls, lower, upper)
-    masked = cv2.bitwise_and(image, image, mask = white_mask)
+        self.conv1 = nn.Conv2d(input, output, kernel_size=0, stride=0, padding=0, bias=False)
+        self.bn1 = nn.BatchNorm2d(output)
 
-    return masked
+        self.conv2 = nn.Conv2d(output, output, kernel_size=0, stride=0, padding=0, bias=False)
+        self.bn2 = nn.BatchNorm2d(output)
+        
+    def forward(self, x):
+        """
+        ResNet block 설계
+        """
+        
+        return out
 
-def warpping(image):
+# ResNet Network architecture
+class ResNet(nn.Module):
     """
-        차선을 BEV로 변환하는 함수
-        
-        Return
-        1) _image : BEV result image
-        2) minv : inverse matrix of BEV conversion matrix
+    num_classes: Mnist 데이터셋 분류해야되는 클래스 개수
+    num_layer: ResNet Block 반복 횟수
+    conv1: 1 channel -> 32 channel
+    conv2: 32 channel -> 1 channel
+    conv1, conv2의 경우 피쳐 크기 유지
+    input, output, kernel size, stride, padding 값을 넣으면 됩니다
     """
-    
-    source = np.float32([[0, 0], [0, 0], [0, 0], [0, 0]])
-    destination = np.float32([[0, 0], [0, 0], [0, 0], [0, 0]])
+    def __init__(self, block=NET_ResNet, num_classes=10, num_layer=10):
+        super(ResNet, self).__init__()
+        self.input = 32
+        self.output = 32
 
-    transform_matrix = cv2.getPerspectiveTransform(source, destination)
-    minv = cv2.getPerspectiveTransform(destination, source)
-    _image = cv2.warpPerspective(image, transform_matrix, (0, 0))
+        self.conv1 = nn.Conv2d(0, 0, kernel_size=0, stride=0, padding=0, bias=False)
+        self.conv2 = nn.Conv2d(0, 0, kernel_size=0, stride=0, padding=0, bias=False)
 
-    return _image, minv
+        self.layer = self.make_layer(block, self.input, self.output, num_layer)
 
-def plothistogram(image):
-    """
-        histogram을 통해 2개의 차선 위치를 추출해주는 함수
-        
-        Return
-        1) leftbase : left lane pixel coords
-        2) rightbase : right lane pixel coords
-    """
-    histogram = np.sum(image[image.shape[0]//2:, :], axis=0)
-    midpoint = np.int(histogram.shape[0]/2)
-    leftbase = np.argmax(histogram[:midpoint])
-    rightbase = np.argmax(histogram[midpoint:]) + midpoint
+        self.linear = nn.Linear(0, num_classes)
 
-    return leftbase, rightbase, histogram
+    def make_layer(self, block, input, output, num_layer):
+        layers = []
+        for i in range(num_layer):
+            layers.append(block(input, output))
 
-def slide_window_search(binary_warped, left_current, right_current):
-    """
-        histogram을 통해 파악된 차선의 위치에 sliding window search 적용하는 함수
-        
-        Return (ret)
-        1) left_fitx : 왼쪽 차선에 해당하는 픽셀 x좌표들
-        2) right_fitx : 오른쪽 차선에 해당하는 픽셀 x좌표들
-        3) ploty : 차선에 해당하는 픽셀 y좌표들
-    """
-    out_img = np.dstack((binary_warped, binary_warped, binary_warped))
+        return nn.Sequential(*layers)
 
-    nwindows = 0
-    window_height = np.int(binary_warped.shape[0] / nwindows)
-    nonzero = binary_warped.nonzero()  # 선이 있는 부분의 인덱스만 저장
-    nonzero_y = np.array(nonzero[0])  # 선이 있는 부분 y의 인덱스 값
-    nonzero_x = np.array(nonzero[1])  # 선이 있는 부분 x의 인덱스 값
-    margin = 100
-    minpix = 50
-    left_lane = []
-    right_lane = []
-    color = [0, 255, 0]
-    thickness = 2
+    def forward(self, x):
+        """
+        전체 네트워크 설계
+        """
 
-    for w in range(nwindows):
-        win_y_low = binary_warped.shape[0] - (w + 1) * window_height  # window 윗부분
-        win_y_high = binary_warped.shape[0] - w * window_height  # window 아랫 부분
-        win_xleft_low = left_current - margin  # 왼쪽 window 왼쪽 위
-        win_xleft_high = left_current + margin  # 왼쪽 window 오른쪽 아래
-        win_xright_low = right_current - margin  # 오른쪽 window 왼쪽 위
-        win_xright_high = right_current + margin  # 오른쪽 window 오른쪽 아래
-
-        cv2.rectangle(out_img, (win_xleft_low, win_y_low), (win_xleft_high, win_y_high), color, thickness)
-        cv2.rectangle(out_img, (win_xright_low, win_y_low), (win_xright_high, win_y_high), color, thickness)
-        good_left = ((nonzero_y >= win_y_low) & (nonzero_y < win_y_high) & (nonzero_x >= win_xleft_low) & (nonzero_x < win_xleft_high)).nonzero()[0]
-        good_right = ((nonzero_y >= win_y_low) & (nonzero_y < win_y_high) & (nonzero_x >= win_xright_low) & (nonzero_x < win_xright_high)).nonzero()[0]
-        left_lane.append(good_left)
-        right_lane.append(good_right)
-        cv2.namedWindow('sliding window')
-        cv2.moveWindow('sliding window', 1200, 0)
-        cv2.imshow("sliding window", out_img)
-
-        if len(good_left) > minpix:
-            left_current = np.int(np.mean(nonzero_x[good_left]))
-        if len(good_right) > minpix:
-            right_current = np.int(np.mean(nonzero_x[good_right]))
-
-    left_lane = np.concatenate(left_lane)  # np.concatenate() -> array를 1차원으로 합침
-    right_lane = np.concatenate(right_lane)
-
-    leftx = nonzero_x[left_lane]
-    lefty = nonzero_y[left_lane]
-    rightx = nonzero_x[right_lane]
-    righty = nonzero_y[right_lane]
-
-
-    left_fit = np.polyfit(lefty, leftx, 2)
-    right_fit = np.polyfit(righty, rightx, 2)
-
-    ploty = np.linspace(0, binary_warped.shape[0] - 1, binary_warped.shape[0])
-    left_fitx = left_fit[0] * ploty ** 2 + left_fit[1] * ploty + left_fit[2]
-    right_fitx = right_fit[0] * ploty ** 2 + right_fit[1] * ploty + right_fit[2]
-    
-    ltx = np.trunc(left_fitx)  # np.trunc() -> 소수점 부분을 버림
-    rtx = np.trunc(right_fitx)
-    
-    out_img[nonzero_y[left_lane], nonzero_x[left_lane]] = [255, 0, 0]
-    out_img[nonzero_y[right_lane], nonzero_x[right_lane]] = [0, 0, 255]
-
-    # plt.imshow(out_img)
-    # plt.plot(left_fitx, ploty, color = 'yellow')
-    # plt.plot(right_fitx, ploty, color = 'yellow')
-    # plt.xlim(0, 1280)
-    # plt.ylim(720, 0)
-    # plt.show()
-
-    ret = {'left_fitx' : ltx, 'right_fitx': rtx, 'ploty': ploty}
-
-    return ret
-
-def draw_lane_lines(original_image, warped_image, Minv, draw_info):
-    """
-        차선과 차선 안쪽에 해당하는 영역을 시각화해주는 함수
-        
-        Return
-        1) result : 원본 이미지에 차선과 차선 안쪽 영역 표시한 이미지
-        2) newwarp : 검정색 이미지에 차선과 차선 안쪽 영역만 표시한 이미지
-        3) color_warp : BEV 이미지에 차선과 차선 안쪽 영역만 표시한 이미지
-        4) pts_left_list : 왼쪽 차선에 해당하는 픽셀 좌표들
-        5) pts_right_list : 오른쪽 차선에 해당하는 픽셀 좌표들
-    """
-    left_fitx = draw_info['left_fitx']
-    right_fitx = draw_info['right_fitx']
-    ploty = draw_info['ploty']
-
-    warp_zero = np.zeros_like(warped_image).astype(np.uint8)
-    color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
-
-    pts_left = np.array([np.transpose(np.vstack([left_fitx, ploty]))])
-    pts_right = np.array([np.flipud(np.transpose(np.vstack([right_fitx, ploty])))])
-    pts = np.hstack((pts_left, pts_right))
-    
-    pts_left_list = pts_left.tolist()
-    pts_right_list = pts_right.tolist()
-
-    mean_x = np.mean((left_fitx, right_fitx), axis=0)
-    pts_mean = np.array([np.flipud(np.transpose(np.vstack([mean_x, ploty])))])
-
-    cv2.fillPoly(color_warp, np.int_([pts]), (0, 0, 255))
-    cv2.fillPoly(color_warp, np.int_([pts_mean]), (0, 0, 255))
-
-    for left_point in pts_left_list[0]:
-        cv2.line(color_warp, (round(left_point[0]), round(left_point[1])), (round(left_point[0]), round(left_point[1])), (0, 255, 0), 5)
-        
-    for right_point in pts_right_list[0]:
-        cv2.line(color_warp, (round(right_point[0]), round(right_point[1])), (round(right_point[0]), round(right_point[1])), (0, 255, 0), 5)
-    
-    newwarp = cv2.warpPerspective(color_warp, Minv, (original_image.shape[1], original_image.shape[0]))        
-        
-    result = cv2.addWeighted(original_image, 1, newwarp, 0.4, 0)
-
-    return result, newwarp, color_warp, pts_left_list, pts_right_list
-
-def main():
-    while True:
-        retval, img = cap.read()
-        
-        if img is None:
-            break
-        
-        # img = cv2.resize(img, (640, 480))
-        
-        # BEV wrapped img
-        warpped_img, minverse = warpping(img)
-        cv2.namedWindow('warpped')
-        cv2.moveWindow('warpped', 0, 0)
-        cv2.imshow('warpped', warpped_img)
-
-        blurred_img = cv2.GaussianBlur(warpped_img, (0, 0), 0)
-        cv2.namedWindow('Gaussian Blur')
-        cv2.moveWindow('Gaussian Blur', 600, 0)
-        cv2.imshow('Gaussian Blur', blurred_img)
-        
-        # BEV 필터링
-        w_f_img = color_filter(blurred_img)
-        cv2.namedWindow('Color filter')
-        cv2.moveWindow('Color filter', 0, 700)
-        cv2.imshow('Color filter', w_f_img)
-
-        # BEV  threshold
-        _gray = cv2.cvtColor(w_f_img, cv2.COLOR_BGR2GRAY)
-        ret, thresh = cv2.threshold(_gray, 0, 0, cv2.THRESH_BINARY)
-        cv2.namedWindow('threshold')
-        cv2.moveWindow('threshold', 600, 700)
-        cv2.imshow('threshold', thresh)
-        
-        # 선 분포도 조사 histogram
-        leftbase, rightbase, hist = plothistogram(thresh)
-        # plt.plot(hist)
-        # plt.show()
-
-        # histogram 기반 Sliding Window Search
-        draw_info = slide_window_search(thresh, leftbase, rightbase)
-
-
-        # # 원본 이미지에 라인 넣기
-        result, newwarp, color_warp, pts_left_list, pts_right_list = draw_lane_lines(img, thresh, minverse, draw_info)
-        cv2.namedWindow('newwarp')
-        cv2.moveWindow('newwarp', 1200, 550)
-        cv2.imshow("newwarp", newwarp)
-        
-        cv2.namedWindow('colorwarp')
-        cv2.moveWindow('colorwarp', 1200, 0)
-        cv2.imshow("colorwarp", color_warp)
-        
-        cv2.namedWindow('result')
-        cv2.imshow("result", result)
-
-        key = cv2.waitKey(1)
-        if key == 27:
-            break
-
-main()
-
-if cap.isOpened():
-    cap.release()
-
-cv2.destroyAllWindows()
+        return out
