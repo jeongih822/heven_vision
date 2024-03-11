@@ -3,13 +3,10 @@ import numpy as np
 
 
 def draw_checkerboard(img, N, M):
-    counter = 0
-    c_counter = 0
     color = 0
     hell = 0
     for i in range(int(N/M)):
         hell = (hell+1)%2
-        print("hell : ",hell)
         for j in range(int(N/M)):
             if j % 2 ==hell :
                 img[i*M : (i+1)*M , j*M : (j+1)*M] = 0
