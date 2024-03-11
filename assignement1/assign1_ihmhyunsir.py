@@ -25,7 +25,7 @@ if __name__ == "__main__":
     code
     """
     edge_img = cv2.Canny(img,150,100)
-    cv2.imshow("Edge",edge_img)
+
     lines = cv2.HoughLinesP(edge_img, 1, np.pi/180 , 0, minLineLength = M, maxLineGap = 5)
     
     hough_img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
