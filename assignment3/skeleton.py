@@ -26,15 +26,22 @@ class lane_detect():
         """
         code here
         """
+        self.pub.publish(self.lane_detect())
     
     """
-    lane preprocessing code here
+    lane detection preprocessing code here
     """
     
     def main(self):
         """
-        code here
+        code here(lane_detection)
         """
+        pub_msg = lane_info()
+        """
+        code here(publish)
+        """
+
+        return pub_msg
 
 
 if __name__ == "__main__":
