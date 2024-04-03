@@ -15,6 +15,8 @@ from lane_control.msg import lane_info
 # float32 right_theta
 from math import *
 
+red = (0, 0, 255)
+
 class lane_detect():
     def __init__(self):
         self.bridge = CvBridge()
@@ -25,7 +27,7 @@ class lane_detect():
         self.warp_img_h, self.warp_img_w, self.warp_img_mid = 460, 250, 230
 
         # canny params
-        self.canny_low, self.canny_high = 100, 120
+        self.canny_low, self.canny_high = 50, 80
 
         # HoughLineP params
         self.hough_threshold, self.min_length, self.min_gap = 10, 30, 10
@@ -50,7 +52,7 @@ class lane_detect():
         self.image = self.bridge.compressed_imgmsg_to_cv2(data, desired_encoding="bgr8")
         cv2.imshow("Original", self.image)
 
-        img = cv2.resize(self.image, (640, 480))
+        # img = cv2.resize(self.image, (640, 480))
 
         self.pub.publish(self.main())
     
@@ -66,19 +68,19 @@ class lane_detect():
             2) minv : inverse matrix of BEV conversion matrix
         """
         
-        source = np.float32([[235, 250], [330, 250], [80, 475], [460, 475]])
-        destination = np.float32([[0, 0], [250, 0], [0, 460], [250, 460]])
+        source = np.float32([[260, 255], [0, 330], [365, 255], [625, 330]])
+        destination = np.float32([[128, 0], [128, 480], [512, 0], [512, 480]])
 
         transform_matrix = cv2.getPerspectiveTransform(source, destination)
         minv = cv2.getPerspectiveTransform(destination, source)
-        _image = cv2.warpPerspective(image, transform_matrix, (250, 460))
+        _image = cv2.warpPerspective(image, transform_matrix, (640, 480))
         if show:
             cv2.imshow("warpped_img", _image)
 
         return _image, minv
     
     def to_canny(self, img, show=False):
-        img = cv2.GaussianBlur(img, (7,7), 0)
+        # img = cv2.GaussianBlur(img, (7,7), 0)
         img = cv2.Canny(img, self.canny_low, self.canny_high)
         if show:
             cv2.imshow('canny', img)
@@ -122,11 +124,11 @@ class lane_detect():
             cv2.imshow('filtered lines', filter_img)
 
         # compute left & right theta....??
-        if 0 <= position < 120:
-            self.left_theta = self.angle
-        elif 120 <= position < 250:
-            self.right_theta = self.angle
-        return positions
+        # if 0 <= position < 120:
+        #     self.left_theta = self.angle
+        # elif 120 <= position < 250:
+        #     self.right_theta = self.angle
+        return positions, self.angle
 
     def get_cluster(self, positions):
         '''
@@ -160,7 +162,7 @@ class lane_detect():
 
         if not lane_candidates:
             self.lane = predicted_lane
-            return
+            return self.lane
 
         possibles = []
 
@@ -225,8 +227,8 @@ class lane_detect():
         self.lane = 0.7 * best + 0.3 * predicted_lane
         self.mid = np.mean(self.lane)
         
-        self.left_x = self.lane[0]
-        self.right_x = self.lane[2]
+        return self.lane
+        
 
 
     # def mark_lane(self, img, lane=None):
@@ -248,11 +250,41 @@ class lane_detect():
         """
         code here(lane_detection)
         """
+        # self.image = cv2.resize(self.image, (640, 480))
+        # cv2.imshow("original", self.image)
+        
+        # BEV warpped image
+        warpped_img, minverse = self.warpping(self.image, show=True)
+        # cv2.imshow('warpped', warpped_img)
+        
+        # Canny Edge
+        canny_img = self.to_canny(warpped_img, show=True)
+        
+        # Hough Transform
+        lines = self.hough(canny_img, show=True)
+
+        # Filtering
+        positions, angle = self.filter(lines, show=True)
+        
+        # Clustering
+        lane_candidates = self.get_cluster(positions)
+        
+        # predict and update lane
+        predicted_lane = self.predict_lane()
+        lane = self.update_lane(lane_candidates, predicted_lane)
+        
+        left_x = lane[0]
+        right_x = lane[2]
+        left_angle = angle
+        right_angle = angle
+        
+        cv2.waitKey(1)
+        
         pub_msg = lane_info()
-        pub_msg.left_x = self.left_x
-        pub_msg.right_x = self.right_x
-        pub_msg.left_theta = self.left_theta
-        pub_msg.right_theta = self.right_theta
+        pub_msg.left_x = left_x
+        pub_msg.right_x = right_x
+        pub_msg.left_theta = left_angle
+        pub_msg.right_theta = right_angle
 
         return pub_msg
 
