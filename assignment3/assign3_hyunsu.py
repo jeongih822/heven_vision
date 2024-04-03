@@ -196,7 +196,13 @@ class lane_detect():
         """
         code here
         """
-        self.image = self.bridge.compressed_imgmsg_to_cv2(data, desired_encoding="bgr8")
+        self.image = self.bridge.compressed_imgmsg_to_cv2(data, desired_encoding="bgr8")        
+        self.pub.publish(self.lane_detect())
+    
+    """
+    lane detection preprocessing code here
+    """
+    def lane_detect(self):
         self.image = cv2.resize(self.image, (640, 480))
         cv2.imshow("original", self.image)
         
@@ -221,27 +227,27 @@ class lane_detect():
         predicted_lane = self.predict_lane()
         self.update_lane(lane_candidates, predicted_lane)
         
-        cv2.waitKey(30)
-        
-        self.pub.publish(self.lane_detect())
-    
-    """
-    lane detection preprocessing code here
-    """
-    
-    def main(self):
-        """
-        code here(lane_detection)
-        """
         pub_msg = lane_info()
-        pub_msg.left_x = self.lane[0]
-        pub_msg.right_x = self.lane[-1] 
+        pub_msg.left_x = int(self.lane[0])
+        pub_msg.right_x = int(self.lane[-1])
         pub_msg.left_theta = self.angle
         pub_msg.right_theta = self.angle
-        """
-        code here(publish)
-        """
         return pub_msg
+        
+        
+    # def main(self):
+    #     """
+    #     code here(lane_detection)
+    #     """
+    #     pub_msg = lane_info()
+    #     pub_msg.left_x = self.lane[0]
+    #     pub_msg.right_x = self.lane[-1] 
+    #     pub_msg.left_theta = self.angle
+    #     pub_msg.right_theta = self.angle
+    #     """
+    #     code here(publish)
+    #     """
+    #     return pub_msg
 
 
 if __name__ == "__main__":
