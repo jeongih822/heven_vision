@@ -108,11 +108,11 @@ def main(args):
         for i, (images, labels) in enumerate(tqdm.tqdm(trainLoader, desc=msg)):
             images = images.to(device)
             labels = labels.to(device)
-            optimizer.zero_grad()
-            outputs = network(images)
-            lossBatch = lossFunction(outputs, labels)
-            lossBatch.backward()
-            optimizer.step()
+            optimizer.zero_grad() # Initialize gradient
+            outputs = network(images) # input images to network
+            lossBatch = lossFunction(outputs, labels) # Loss function
+            lossBatch.backward() # Backpropagation
+            optimizer.step() # Update weights
             trainLoss += lossBatch.item() * images.size(0)
 
             total += outputs.size(0)

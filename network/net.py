@@ -39,6 +39,7 @@ class NET(nn.Module):
         convolution
         
         """
+        # x.size(0) : batch_size, self.inFC : input size of FC layer
         x = x.view(x.size(0), self.inFC)
         """
 
