@@ -258,7 +258,7 @@ class lane_detect():
         # cv2.imshow('warpped', warpped_img)
         
         # Canny Edge
-        canny_img = self.to_canny(warpped_img, show=True)
+        canny_img = self.to_canny(wargpped_im, show=True)
         
         # Hough Transform
         lines = self.hough(canny_img, show=True)
