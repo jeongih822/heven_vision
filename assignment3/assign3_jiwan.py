@@ -22,7 +22,7 @@ class lane_detect():
         self.warp_x, self.warp_y = 240, 480
         self.warp_mid = self.warp_y/2
         # Canny_edge
-        self.canny_low, self.canny_high = 100, 150
+        self.canny_low, self.canny_high = 20,40
         # HoughlineP
         self.hough_threshold, self.min_length, self.min_gap = 10, 30, 10
         # Filtering
@@ -35,7 +35,7 @@ class lane_detect():
         # Clustering
         self.cluster_threshold = 25
         self.lane = np.array([20., 125., 230.])
-
+        
 
         self.bridge = CvBridge()
         rospy.init_node('lane_detection_node', anonymous=False)
@@ -44,17 +44,20 @@ class lane_detect():
 
     def camera_callback(self, data):
         self.img = self.bridge.compressed_imgmsg_to_cv2(data, desired_encoding="bgr8")
-        self.main()
-        self.pub.publish(self.lane_detect())
+        cv2.imshow("Original", self.img)
+        self.pub.publish(self.main())
     
-    def warpping(self, image):
-        source = np.float32([[220, 280], [420, 280], [20, 480], [600, 480]])
-        destination = np.float32([[0, 0], [self.warp_x, 0], [0, self.warp_y], [self.warp_x, self.warp_y]])
+    def warpping(self, image, show=False):
+        source = np.float32([[260, 255], [0, 330], [365, 255], [625, 330]])
+        destination = np.float32([[128, 0], [128, 480], [512, 0], [512, 480]])
         transform_matrix = cv2.getPerspectiveTransform(source, destination)
-        _image = cv2.warpPerspective(image, transform_matrix, (self.warp_x,self.warp_y))
+        _image = cv2.warpPerspective(image, transform_matrix, (640,415))
+        if show:
+            cv2.imshow("warpped_img", _image)
         return _image
 
     def hough(self, img,show =False):
+        red = (0, 0, 255)
         lines = cv2.HoughLinesP(img, 1, np.pi/180, self.hough_threshold, self.min_gap, self.min_length)
         if show:
             hough_img = np.zeros((img.shape[0], img.shape[1], 3))
@@ -82,12 +85,14 @@ class lane_detect():
                         left_thetas.append(theta)
                     else:  # Right lane
                         right_thetas.append(theta)
-
-        self.left_angle = np.mean(left_thetas) if left_thetas else None
-        self.right_angle = np.mean(right_thetas) if right_thetas else None
         self.prev_angle.append(self.angle)
         if thetas:
             self.angle = np.mean(thetas)
+        if left_thetas:
+            self.left_angle = np.mean(left_thetas)
+        if right_thetas:
+            self.left_angle = np.mean(right_thetas) 
+            
         return positions
 
     def get_cluster(self, positions):
@@ -111,7 +116,8 @@ class lane_detect():
     def update_lane(self, lane_candidates, predicted_lane):
         if not lane_candidates:
             self.lane = predicted_lane
-            return
+            return self.lane
+        
         possibles = []
         for lc in lane_candidates:
             idx = np.argmin(abs(self.lane-lc))
@@ -167,29 +173,29 @@ class lane_detect():
         possibles = np.array(possibles)
         error = np.sum((possibles-predicted_lane)**2, axis=1)
         best = possibles[np.argmin(error)]
-        self.lane = 0.7 * best + 0.3 * predicted_lane  #parameter
-        self.left_x = self.lane[0]
-        self.right_x = self.lane[2]
-
+        self.lane = 0.7 * best + 0.3 * predicted_lane
+        return self.lane
 
     def main(self):
-        if self.img is not None: 
-            self.img = cv2.resize(self.img, (640, 480))
-            warpped_img = self.warpping(self.img)
-            blurred_img = cv2.GaussianBlur(warpped_img, (0, 0), 1)
-            canny_img = cv2.Canny(blurred_img, self.canny_low, self.canny_high)
-            lines = self.hough(canny_img, show=False)
-            positions = self.filter(lines)
-            lane_candidates = self.get_cluster(positions)
-            predicted_lane = self.predict_lane()
-            self.update_lane(lane_candidates, predicted_lane)
-
-                                           
+        warpped_img = self.warpping(self.img, show=True)
+        blurred_img = cv2.GaussianBlur(warpped_img, (0, 0), 1)
+        canny_img = cv2.Canny(blurred_img, self.canny_low, self.canny_high)
+        lines = self.hough(canny_img, show=True)
+        positions = self.filter(lines)
+        lane_candidates = self.get_cluster(positions)
+        predicted_lane = self.predict_lane()
+        lane = self.update_lane(lane_candidates, predicted_lane)
+        cv2.waitKey(1)
+        
+        left_x = lane[0]
+        right_x = lane[2]
+        leftangle = self.angle
+        rightangle = self.angle
         pub_msg = lane_info()
-        pub_msg.left_x = np.int(self.left_x)
-        pub_msg.right_x = np.int(self.right_x)
-        pub_msg.left_theta = np.float32(self.left_angle)
-        pub_msg.right_theta = np.float32(self.right_angle)
+        pub_msg.left_x = int(left_x)
+        pub_msg.right_x = int(right_x)
+        pub_msg.left_theta = np.float32(leftangle)
+        pub_msg.right_theta = np.float32(rightangle)
         return pub_msg
     
 if __name__ == "__main__":
