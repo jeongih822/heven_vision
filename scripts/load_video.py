@@ -1,6 +1,7 @@
 import cv2
 
-cap = cv2.VideoCapture(0)
+path = '/home/yeong/catkin_ws/src/heven_vision/video/testVideo.mp4'
+cap = cv2.VideoCapture(path)
 
 while True:
     ret, frame = cap.read()
